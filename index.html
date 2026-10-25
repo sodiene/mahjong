@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>家族麻雀 スコア＆スタッツ管理</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  :root {
+    --bg-color: #1a1b26;
+    --panel-bg: #24283b;
+    --text-main: #c0caf5;
+    --text-muted: #565f89;
+    --border: #414868;
+    --btn-bg: #3d59a1;
+    --btn-hover: #2ac3de;
+    --highlight: #e0af68;
+    --danger: #f7768e;
+    --color-hideaki: #f1c40f; 
+    --color-yuki: #e74c3c;    
+    --color-takashi: #3498db; 
+    --color-atsushi: #2ecc71; 
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Helvetica Neue', Arial, sans-serif; }
+  body { background-color: var(--bg-color); color: var(--text-main); line-height: 1.5; padding-bottom: 50px; }
+  .hidden { display: none !important; }
+  
+  .container { max-width: 800px; margin: 0 auto; padding: 16px; }
+  .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 16px; }
+  .header h1 { font-size: 1.2rem; }
+  .header .time { font-size: 0.9rem; color: var(--text-muted); }
+
+  button { background-color: var(--btn-bg); color: #fff; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-size: 1rem; transition: background 0.2s; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button:hover:not(:disabled) { background-color: var(--btn-hover); }
+  button.danger { background-color: var(--danger); }
+  button.outline { background-color: transparent; border: 1px solid var(--border); color: var(--text-main); }
+  
+  /* 選択時ボタンの色を見やすく修正 */
+  button.selected { background-color: var(--btn-bg); color: #fff; font-weight: bold; border: 2px solid var(--highlight); box-shadow: inset 0 0 5px rgba(0,0,0,0.5); }
+
+  .menu-buttons { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .menu-buttons button { flex: 1 1 calc(33% - 8px); min-width: 100px; }
+  
+  .setup-group { margin-bottom: 16px; background: var(--panel-bg); padding: 16px; border-radius: 8px; }
+  .setup-group label { display: block; margin-bottom: 8px; color: var(--highlight); font-weight: bold; }
+  select, input[type="number"] { width: 100%; padding: 10px; background: var(--bg-color); color: var(--text-main); border: 1px solid var(--border); border-radius: 4px; font-size: 1rem; margin-bottom: 8px; }
+
+  .match-info { font-size: 1.3rem; font-weight: bold; text-align: center; margin-bottom: 10px; color: var(--highlight); }
+  .chart-container { background: var(--panel-bg); padding: 10px; border-radius: 8px; margin-bottom: 16px; height: 250px; }
+  
+  .score-board { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+  .score-card { background: var(--panel-bg); padding: 12px; border-radius: 8px; display: flex; flex-direction: column; border-left: 4px solid; position: relative; }
+  .score-card .top-row { display: flex; justify-content: space-between; align-items: center; }
+  .score-card .name { font-size: 1rem; font-weight: bold; }
+  .score-card .delta { font-size: 0.9rem; font-weight: bold; }
+  .score-card .score { font-size: 1.4rem; font-family: monospace; text-align: right; margin-top: 4px; }
+  .score-card[data-player="秀明"] { border-color: var(--color-hideaki); }
+  .score-card[data-player="由紀"] { border-color: var(--color-yuki); }
+  .score-card[data-player="貴史"] { border-color: var(--color-takashi); }
+  .score-card[data-player="敦史"] { border-color: var(--color-atsushi); }
+
+  .top-conditions { background: rgba(224, 175, 104, 0.1); border: 1px solid var(--highlight); padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 0.9rem; }
+  .top-conditions h3 { color: var(--highlight); margin-bottom: 8px; font-size: 1rem; }
+  .condition-item { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .condition-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+  .actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+  .action-panel { background: var(--panel-bg); padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid var(--border); animation: slideDown 0.2s ease-out; }
+  @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+  
+  .form-section { margin-bottom: 16px; }
+  .form-section h4 { margin-bottom: 8px; font-size: 0.95rem; color: var(--text-main); border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  .btn-group { display: flex; flex-wrap: wrap; gap: 6px; }
+  .btn-group button { flex: 1 1 22%; padding: 8px 4px; font-size: 0.9rem; background: var(--bg-color); border: 1px solid var(--border); }
+  
+  .log-container { background: var(--panel-bg); border-radius: 8px; padding: 12px; margin-bottom: 16px; max-height: 250px; overflow-y: auto; font-size: 0.9rem; }
+  .log-item { display: flex; flex-direction: column; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer; transition: background 0.2s; }
+  .log-item:hover { background: rgba(255,255,255,0.05); }
+  .log-item:last-child { border-bottom: none; }
+  .log-header { display: flex; justify-content: space-between; color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px; }
+  .log-body { display: flex; justify-content: space-between; align-items: center; }
+  .log-detail { flex: 1; margin-right: 10px; }
+  .log-result { font-weight: bold; color: var(--highlight); text-align: right; }
+
+  .stats-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; white-space: nowrap; }
+  .stats-table th, .stats-table td { padding: 8px; text-align: right; border-bottom: 1px solid var(--border); }
+  .stats-table th:first-child, .stats-table td:first-child { text-align: left; position: sticky; left: 0; background: var(--panel-bg); z-index: 1; }
+  .stats-table th { color: var(--text-muted); font-weight: normal; }
+  .text-plus { color: #2ecc71; }
+  .text-minus { color: #e74c3c; }
+  
+  .ron-player-card { background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; margin-bottom: 10px; border-left: 3px solid var(--highlight); }
+</style>
+</head>
+<body>
+
+<div id="app" class="container">
+  
+  <!-- ホーム画面 -->
+  <div id="screen-home">
+    <div class="header">
+      <h1>家族麻雀 スコア管理</h1>
+      <span class="time" id="home-time"></span>
+    </div>
+    <div class="menu-buttons">
+      <button onclick="nav('setup')" style="flex:1 1 100%;">新規対局開始</button>
+      <button onclick="nav('stats')" class="outline">スタッツ</button>
+      <button onclick="nav('data')" class="outline">ファイル管理</button>
+    </div>
+    <div class="setup-group">
+      <label>最近の履歴 (タップで詳細)</label>
+      <div id="history-list" class="log-container">履歴がありません。</div>
+    </div>
+  </div>
+
+  <!-- データ管理画面 -->
+  <div id="screen-data" class="hidden">
+    <div class="header">
+      <h1>ファイル管理</h1>
+      <button class="outline" onclick="nav('home')">戻る</button>
+    </div>
+    <div class="setup-group">
+      <label>データのエクスポート (バックアップ)</label>
+      <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:10px;">
+        ※スマホの「FamilyMahjong」フォルダ等に保存してください。
+      </p>
+      <button onclick="exportData()" style="width:100%; margin-bottom:20px;">履歴をファイルに保存 (JSON)</button>
+      
+      <label>データのインポート (読み込み)</label>
+      <input type="file" id="import-file" accept=".json" style="margin-bottom:10px;">
+      <button onclick="importData()" style="width:100%;">ファイルから読み込む</button>
+    </div>
+  </div>
+
+  <!-- 対局設定画面 -->
+  <div id="screen-setup" class="hidden">
+    <div class="header">
+      <h1>対局設定</h1>
+      <button class="outline" onclick="nav('home')">戻る</button>
+    </div>
+    <div class="setup-group">
+      <label>座り順 (東南西北)</label>
+      <select id="seat-ton"><option value="秀明">秀明</option><option value="由紀">由紀</option><option value="貴史">貴史</option><option value="敦史">敦史</option></select>
+      <select id="seat-nan"><option value="由紀" selected>由紀</option><option value="秀明">秀明</option><option value="貴史">貴史</option><option value="敦史">敦史</option></select>
+      <select id="seat-sha"><option value="貴史" selected>貴史</option><option value="秀明">秀明</option><option value="由紀">由紀</option><option value="敦史">敦史</option></select>
+      <select id="seat-pei"><option value="敦史" selected>敦史</option><option value="秀明">秀明</option><option value="由紀">由紀</option><option value="貴史">貴史</option></select>
+    </div>
+    <div class="setup-group">
+      <label>起家 (東1局の親)</label>
+      <select id="first-oya"></select>
+    </div>
+    <button onclick="startMatch()" style="width: 100%;">対局開始 (30,000点)</button>
+  </div>
+
+  <!-- 対局メイン画面 -->
+  <div id="screen-match" class="hidden">
+    <div class="header">
+      <h1>対局中</h1>
+      <span class="time" id="match-time"></span>
+    </div>
+    <div class="match-info" id="kyoku-info">東1局 0本場 供託0</div>
+    
+    <div class="chart-container"><canvas id="scoreChart"></canvas></div>
+    <div class="score-board" id="score-board"></div>
+
+    <div id="top-conditions" class="top-conditions hidden">
+      <h3>オーラス トップ条件</h3>
+      <div id="conditions-list"></div>
+    </div>
+
+    <div class="actions">
+      <button onclick="toggleForm('ron')">ロン</button>
+      <button onclick="toggleForm('tsumo')">ツモ</button>
+      <button onclick="toggleForm('ryukyoku')">流局</button>
+      <button onclick="toggleForm('custom')">カスタム</button>
+    </div>
+
+    <div id="form-container"></div>
+    <div class="log-container" id="match-log"></div>
+    
+    <button class="danger" style="width: 100%; margin-top: 10px;" onclick="endMatchConfirm()">対局中断 / 打ち切り</button>
+  </div>
+
+  <!-- 対局詳細・編集画面 -->
+  <div id="screen-detail" class="hidden">
+    <div class="header">
+      <h1>対局詳細</h1>
+      <button class="outline" onclick="nav('home')">戻る</button>
+    </div>
+    <div id="detail-content" class="setup-group"></div>
+    <div class="chart-container"><canvas id="detailChart"></canvas></div>
+    <div class="setup-group" style="margin-top: 16px;">
+      <label>最終スコア微調整</label>
+      <div id="edit-scores"></div>
+      <button onclick="saveEditedScores()" style="width: 100%; margin-bottom: 10px;">点数を修正して保存</button>
+      <button class="danger" onclick="deleteMatch()" style="width: 100%;">この対局記録を削除</button>
+    </div>
+  </div>
+
+  <!-- スタッツ画面 -->
+  <div id="screen-stats" class="hidden">
+    <div class="header">
+      <h1>スタッツ</h1>
+      <button class="outline" onclick="nav('home')">戻る</button>
+    </div>
+    <div class="setup-group">
+      <label>期間フィルタ</label>
+      <select id="stats-period" onchange="renderStats()"></select>
+    </div>
+    <div class="setup-group" style="padding: 10px; overflow-x: auto;">
+      <table class="stats-table" id="stats-table"></table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const PLAYERS = ["秀明", "由紀", "貴史", "敦史"];
+const PLAYER_COLORS = { "秀明": "#f1c40f", "由紀": "#e74c3c", "貴史": "#3498db", "敦史": "#2ecc71" };
+
+let appState = {
+  activeMatch: null,
+  history: JSON.parse(localStorage.getItem("family_mahjong_data")) || { matches: [] },
+  viewingMatchId: null
+};
+
+// --- 初期化時のデータ修復 (古いバグデータのクリーニング) ---
+if (appState.history && appState.history.matches) {
+  // スコアデータが欠損している対局を除外
+  appState.history.matches = appState.history.matches.filter(m => m && m.scores && Object.keys(m.scores).length > 0);
+  // IDが付与されていない対局にIDを付与
+  appState.history.matches.forEach(m => {
+    if (!m.id) m.id = (m.startTime || Date.now()).toString();
+  });
+  localStorage.setItem("family_mahjong_data", JSON.stringify(appState.history));
+}
+
+let chartInstance = null;
+let detailChartInstance = null;
+let currentForm = null;
+let formState = {}; 
+
+function formatTime(timestamp) {
+  if(!timestamp) return '--:--';
+  const d = new Date(timestamp);
+  return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+// 終了後・スタッツ用のPt表記 (+1.7, ▲3.4)
+function formatPt(score) {
+  const pt = (score - 30000) / 1000;
+  if (pt > 0) return '+' + pt.toFixed(1);
+  if (pt < 0) return '▲' + Math.abs(pt).toFixed(1);
+  return '0.0';
+}
+
+setInterval(() => {
+  const t = formatTime(Date.now()).split(' ')[1];
+  document.getElementById('home-time').innerText = t;
+  if(document.getElementById('match-time')) document.getElementById('match-time').innerText = t;
+}, 1000);
+
+function nav(screenId, matchId = null) {
+  ['home', 'setup', 'match', 'stats', 'data', 'detail'].forEach(id => {
+    document.getElementById('screen-' + id).classList.add('hidden');
+  });
+  document.getElementById('screen-' + screenId).classList.remove('hidden');
+  
+  if(screenId === 'home') renderHome();
+  if(screenId === 'setup') updateSetupOptions();
+  if(screenId === 'stats') { initStatsFilter(); renderStats(); }
+  if(screenId === 'match' && appState.activeMatch) renderMatch();
+  if(screenId === 'detail' && matchId) {
+    appState.viewingMatchId = matchId;
+    renderDetail(matchId);
+  }
+}
+
+function saveData() {
+  localStorage.setItem("family_mahjong_data", JSON.stringify(appState.history));
+}
+
+function renderHome() {
+  const list = document.getElementById('history-list');
+  list.innerHTML = '';
+  const matches = [...appState.history.matches].reverse();
+  if(matches.length === 0) { list.innerHTML = '履歴がありません。'; return; }
+  
+  matches.forEach(m => {
+    const sorted = Object.entries(m.scores).sort((a,b)=>b[1]-a[1]);
+    const scoreText = sorted.map((arr, i) => `${i+1}位 ${arr[0]} (${formatPt(arr[1])})`).join('<br>');
+    list.innerHTML += `
+      <div class="log-item" onclick="nav('detail', '${m.id}')">
+        <div class="log-header">
+          <span>${formatTime(m.startTime)} 開始</span>
+          <span>${m.endTime ? formatTime(m.endTime) + ' 終了' : '対局中...'}</span>
+        </div>
+        <div style="font-size: 0.85rem; color: var(--text-main); margin-top: 4px; line-height: 1.4;">
+          ${scoreText}
+        </div>
+      </div>`;
+  });
+}
+
+function updateSetupOptions() {
+  const seats = ['ton', 'nan', 'sha', 'pei'].map(id => document.getElementById('seat-' + id));
+  seats.forEach(s => s.addEventListener('change', updateOyaOptions));
+  updateOyaOptions();
+}
+function updateOyaOptions() {
+  const oyaSelect = document.getElementById('first-oya');
+  oyaSelect.innerHTML = '';
+  ['ton', 'nan', 'sha', 'pei'].forEach(id => {
+    const val = document.getElementById('seat-' + id).value;
+    oyaSelect.innerHTML += `<option value="${val}">${val}</option>`;
+  });
+}
+
+function exportData() {
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appState.history));
+  const el = document.createElement('a');
+  el.setAttribute("href", dataStr);
+  el.setAttribute("download", `mahjong_history_${Date.now()}.json`);
+  document.body.appendChild(el);
+  el.click();
+  el.remove();
+}
+function importData() {
+  const file = document.getElementById('import-file').files[0];
+  if (!file) return alert('ファイルを選択してください');
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data && data.matches) {
+        if(confirm("現在のデータは上書きされます。よろしいですか？")) {
+          // インポート時にもバグデータをクリーニング
+          data.matches = data.matches.filter(m => m && m.scores);
+          data.matches.forEach(m => { if (!m.id) m.id = (m.startTime || Date.now()).toString(); });
+          appState.history = data;
+          saveData();
+          nav('home');
+          alert('読み込みました。');
+        }
+      } else alert('不正なファイルフォーマットです。');
+    } catch(err) { alert('読み込みに失敗しました。'); }
+  };
+  reader.readAsText(file);
+}
+
+// 切り上げ満貫対応
+function calcScore(han, fu, isOya, isTsumo) {
+  let level = 0; 
+  if(han >= 13) level = 5;
+  else if(han >= 11) level = 4;
+  else if(han >= 8) level = 3;
+  else if(han >= 6) level = 2;
+  else if(han >= 5) level = 1;
+  else {
+    let base = fu * Math.pow(2, han + 2);
+    // 切り上げ満貫 (4飜30符=1920, 3飜60符=1920 など)
+    if (base >= 1920) level = 1;
+    else {
+      let ko = Math.ceil(base / 100) * 100;
+      let oya = Math.ceil((base * 1.5) / 100) * 100;
+      if (isTsumo) {
+        if (isOya) {
+          let pay = Math.ceil((base * 2) / 100) * 100;
+          return { total: pay * 3, pays: [pay], name: `${han}飜${fu}符` };
+        } else {
+          let payOya = Math.ceil((base * 2) / 100) * 100;
+          let payKo = Math.ceil(base / 100) * 100;
+          return { total: payOya + payKo * 2, pays: [payKo, payOya], name: `${han}飜${fu}符` };
+        }
+      } else {
+        return { total: isOya ? Math.ceil((base * 6) / 100) * 100 : Math.ceil((base * 4) / 100) * 100, name: `${han}飜${fu}符` };
+      }
+    }
+  }
+  const basePoints = [0, 2000, 3000, 4000, 6000, 8000][level];
+  const names = ["", "満貫", "跳満", "倍満", "三倍満", "役満"];
+  if (isTsumo) {
+    if (isOya) return { total: basePoints * 6, pays: [basePoints * 2], name: names[level] };
+    else return { total: basePoints * 4, pays: [basePoints, basePoints * 2], name: names[level] };
+  } else {
+    return { total: isOya ? basePoints * 6 : basePoints * 4, name: names[level] };
+  }
+}
+
+const SCORE_LIST = [];
+for (let h = 1; h <= 13; h++) {
+  const fus = (h >= 5) ? [0] : [20, 25, 30, 40, 50, 60, 70];
+  for (let f of fus) {
+    if (h === 1 && (f === 20 || f === 25)) continue; 
+    SCORE_LIST.push({ han: h, fu: f, ko: calcScore(h, f, false, true), oya: calcScore(h, f, true, true), koRon: calcScore(h, f, false, false), oyaRon: calcScore(h, f, true, false) });
+  }
+}
+SCORE_LIST.sort((a, b) => a.koRon.total - b.koRon.total);
+
+function startMatch() {
+  const seats = [
+    document.getElementById('seat-ton').value,
+    document.getElementById('seat-nan').value,
+    document.getElementById('seat-sha').value,
+    document.getElementById('seat-pei').value
+  ];
+  if(new Set(seats).size < 4) return alert("プレイヤーが重複しています。");
+  const oya = document.getElementById('first-oya').value;
+  const firstOyaIndex = seats.indexOf(oya);
+  const seating = seats.slice(firstOyaIndex).concat(seats.slice(0, firstOyaIndex));
+
+  appState.activeMatch = {
+    id: Date.now().toString(),
+    startTime: Date.now(),
+    endTime: null,
+    seating: seating, 
+    kyoku: 1, 
+    honba: 0,
+    kyotaku: 0,
+    scores: { [seating[0]]:30000, [seating[1]]:30000, [seating[2]]:30000, [seating[3]]:30000 },
+    history: [], 
+    logs: [] 
+  };
+  saveGraphState();
+  nav('match');
+}
+
+function getKyokuStr(m = appState.activeMatch) {
+  const ba = m.kyoku <= 4 ? '東' : (m.kyoku <= 8 ? '南' : '西');
+  const num = ((m.kyoku - 1) % 4) + 1;
+  return `${ba}${num}局 ${m.honba}本場 供託${m.kyotaku}`;
+}
+function getOyaPlayer(m = appState.activeMatch) {
+  return m.seating[(m.kyoku - 1) % 4];
+}
+
+function saveGraphState() {
+  const m = appState.activeMatch;
+  m.history.push({ kyokuName: getKyokuStr(m).split(' ')[0], scores: PLAYERS.map(p => m.scores[p]) });
+}
+
+function addLog(detail, resultText) {
+  const m = appState.activeMatch;
+  m.logs.push({ kyoku: getKyokuStr(m).split(' ')[0], honba: m.honba, detail, resultText, timestamp: Date.now() });
+}
+
+// 決定前の確認ダイアログ用関数
+function confirmScoreChange(oldScores, oldKyotaku, m) {
+  let msg = "【点数変動】\n";
+  let hasChange = false;
+  PLAYERS.forEach(p => {
+    let diff = m.scores[p] - oldScores[p];
+    if(diff !== 0) {
+      msg += `${p}: ${oldScores[p]} -> ${m.scores[p]} (${diff>0?'+':''}${diff})\n`;
+      hasChange = true;
+    }
+  });
+  if(m.kyotaku !== oldKyotaku) {
+      msg += `\n供託: ${oldKyotaku} -> ${m.kyotaku}\n`;
+      hasChange = true;
+  }
+  msg += "\nこの内容で決定しますか？";
+  return hasChange ? confirm(msg) : true;
+}
+
+function renderMatch() {
+  const m = appState.activeMatch;
+  document.getElementById('kyoku-info').innerText = getKyokuStr(m);
+  
+  const board = document.getElementById('score-board');
+  board.innerHTML = '';
+  
+  m.seating.forEach(p => {
+    const s = m.scores[p];
+    const isOya = (p === getOyaPlayer(m));
+    
+    // 前の局での点数増減を計算
+    let pIndex = PLAYERS.indexOf(p);
+    let delta = 0;
+    if (m.history.length > 1) {
+      delta = m.history[m.history.length-1].scores[pIndex] - m.history[m.history.length-2].scores[pIndex];
+    }
+    
+    board.innerHTML += `
+      <div class="score-card" data-player="${p}">
+        <div class="top-row">
+          <span class="name">${isOya ? '<span style="color:var(--danger)">親</span> ' : ''}${p}</span>
+          <span class="delta ${delta>0?'text-plus':(delta<0?'text-minus':'')}">${delta>0?'+':''}${delta===0?'':delta}</span>
+        </div>
+        <div class="score">${s < 0 ? '▲'+Math.abs(s).toLocaleString() : s.toLocaleString()}</div>
+      </div>
+    `;
+  });
+
+  const condDiv = document.getElementById('top-conditions');
+  if (m.kyoku >= 8) {
+    condDiv.classList.remove('hidden');
+    calcAndRenderTopConditions();
+  } else {
+    condDiv.classList.add('hidden');
+  }
+
+  document.getElementById('match-log').innerHTML = m.logs.map(l => `
+    <div class="log-item">
+      <div class="log-header"><span>${l.kyoku} ${l.honba}本</span><span>${formatTime(l.timestamp).split(' ')[1]}</span></div>
+      <div class="log-body"><span class="log-detail">${l.detail}</span><span class="log-result">${l.resultText}</span></div>
+    </div>
+  `).reverse().join('');
+
+  updateChart('scoreChart', m);
+  document.getElementById('form-container').innerHTML = '';
+  currentForm = null;
+}
+
+function updateChart(canvasId, matchData) {
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  const labels = matchData.history.map((h, i) => i === 0 ? '開始' : h.kyokuName);
+  const datasets = PLAYERS.map((p, i) => ({
+    label: p, data: matchData.history.map(h => h.scores[i]),
+    borderColor: PLAYER_COLORS[p], backgroundColor: 'transparent',
+    tension: 0, borderWidth: 2, pointRadius: 3
+  }));
+
+  let inst = canvasId === 'scoreChart' ? chartInstance : detailChartInstance;
+  if(inst) inst.destroy();
+  inst = new Chart(ctx, {
+    type: 'line', data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#c0caf5', font: {size: 10} } } },
+      scales: { x: { ticks: { color: '#565f89' }, grid: { color: '#24283b' } }, y: { ticks: { color: '#565f89' }, grid: { color: '#24283b' } } }
+    }
+  });
+  if(canvasId === 'scoreChart') chartInstance = inst;
+  else detailChartInstance = inst;
+}
+
+function toggleForm(type) {
+  const container = document.getElementById('form-container');
+  if (currentForm === type) { container.innerHTML = ''; currentForm = null; return; }
+  currentForm = type;
+  formState = { agari: [], hoju: [], ronDetails: {}, riichi: [], tenpai: [] };
+  const m = appState.activeMatch;
+  let html = `<div class="action-panel">`;
+
+  const playerChecks = (field, multi=true) => {
+    return `<div class="btn-group">` + m.seating.map(p => 
+      `<button data-field="${field}" data-player="${p}" onclick="togglePlayerBtn(this, '${field}', '${p}', ${multi})">${p}</button>`
+    ).join('') + `</div>`;
+  };
+  
+  // オーラス以降なら「終了」ボタンも用意する
+  const renderSubmitBtns = (funcName) => {
+    if (m.kyoku >= 8 && type !== 'custom') {
+      return `
+        <div style="display:flex; gap:8px; margin-top:10px;">
+          <button style="flex:1" onclick="${funcName}(false)">決定して次へ</button>
+          <button style="flex:1" class="danger" onclick="${funcName}(true)">決定して対局終了</button>
+        </div>
+      `;
+    }
+    return `<button style="width:100%; margin-top:10px;" onclick="${funcName}(false)">決定</button>`;
+  };
+
+  if (type === 'ron') {
+    html += `
+      <div class="form-section"><h4>アガリ者 (複数可・ダブロン対応)</h4>${playerChecks('agari')}</div>
+      <div class="form-section"><h4>放銃者</h4>${playerChecks('hoju', false)}</div>
+      <div id="ron-details-container"></div>
+      <div class="form-section"><h4>リーチした人 (流局以外でも記録用)</h4>${playerChecks('riichi')}</div>
+      ${renderSubmitBtns('submitRon')}`;
+  } else if (type === 'tsumo') {
+    html += `
+      <div class="form-section"><h4>アガリ者</h4>${playerChecks('agari', false)}</div>
+      <div id="ron-details-container"></div>
+      <div class="form-section"><h4>リーチした人</h4>${playerChecks('riichi')}</div>
+      ${renderSubmitBtns('submitTsumo')}`;
+  } else if (type === 'ryukyoku') {
+    html += `
+      <div class="form-section"><h4>リーチした人 (自動テンパイ)</h4>${playerChecks('riichi')}</div>
+      <div class="form-section"><h4>テンパイ者</h4>${playerChecks('tenpai')}</div>
+      ${renderSubmitBtns('submitRyukyoku')}`;
+  } else if (type === 'custom') {
+    html += `<div class="form-section"><h4>最終点数を直接入力 (合計120,000)</h4>`;
+    m.seating.forEach(p => {
+      html += `<div style="display:flex; align-items:center; margin-bottom:4px;">
+        <label style="width:50px; color:${PLAYER_COLORS[p]}">${p}</label>
+        <input type="number" id="custom-${p}" value="${m.scores[p]}" style="margin-bottom:0;">
+      </div>`;
+    });
+    
+    let kyokuOptions = '';
+    for(let i=0; i<8; i++){
+      let v = i+1;
+      let name = (i<4?'東':'南') + ((i%4)+1) + '局';
+      kyokuOptions += `<option value="${v}" ${m.kyoku==v?'selected':''}>${name}</option>`;
+    }
+
+    html += `</div>
+      <div class="form-section"><h4>次局の局と本場 (親流れ等を手動操作)</h4>
+        <div style="display:flex; gap:10px;">
+          <select id="custom-kyoku">${kyokuOptions}</select>
+          <input type="number" id="custom-honba" value="${m.honba}" style="width:80px;">
+        </div>
+      </div>
+      <button style="width:100%" onclick="submitCustom()">適用</button>`;
+  }
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+function togglePlayerBtn(btn, field, player, multi) {
+  if (!multi) {
+    btn.parentNode.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
+    formState[field] = [player];
+    btn.classList.add('selected');
+  } else {
+    btn.classList.toggle('selected');
+    if (btn.classList.contains('selected')) formState[field].push(player);
+    else formState[field] = formState[field].filter(p => p !== player);
+  }
+
+  if (field === 'agari' && (currentForm === 'ron' || currentForm === 'tsumo')) {
+    updateRonDetails();
+  }
+  
+  // リーチとテンパイの連動
+  if (field === 'riichi' && currentForm === 'ryukyoku') {
+    const tBtn = document.querySelector(`button[data-field="tenpai"][data-player="${player}"]`);
+    if (btn.classList.contains('selected')) {
+      if (!formState.tenpai.includes(player)) {
+        formState.tenpai.push(player);
+        if(tBtn) tBtn.classList.add('selected');
+      }
+    } else {
+      // リーチ解除時はテンパイも解除
+      formState.tenpai = formState.tenpai.filter(p => p !== player);
+      if(tBtn) tBtn.classList.remove('selected');
+    }
+  }
+}
+
+function updateRonDetails() {
+  const container = document.getElementById('ron-details-container');
+  if (!container) return;
+  if (formState.agari.length === 0) { container.innerHTML = ''; return; }
+  
+  let html = '';
+  formState.agari.forEach(p => {
+    if (!formState.ronDetails[p]) formState.ronDetails[p] = {han: null, fu: null};
+    const s = formState.ronDetails[p];
+    html += `
+      <div class="ron-player-card">
+        <h4 style="color:${PLAYER_COLORS[p]}">${p} のアガリ役</h4>
+        <div class="btn-group" style="margin-bottom:8px;">
+          ${[1,2,3,4,5,6,7,8,9,10,11,12,'役満'].map(h => 
+            `<button onclick="setPlayerHan(this, '${p}', '${h}')" class="${s.han == (h==='役満'?13:h) ? 'selected':''}">${h}${h==='役満'?'':'飜'}</button>`
+          ).join('')}
+        </div>
+        <div class="btn-group" id="fu-group-${p}" style="display:${(s.han && s.han <= 4) ? 'flex' : 'none'};">
+          ${[20,25,30,40,50,60,70].map(f => 
+            `<button id="btn-fu-${p}-${f}" onclick="setPlayerFu(this, '${p}', ${f})" class="${s.fu == f ? 'selected':''}">${f}符</button>`
+          ).join('')}
+        </div>
+      </div>
+    `;
+  });
+  container.innerHTML = html;
+  formState.agari.forEach(p => updateFuDisabled(p));
+}
+
+function setPlayerHan(btn, player, han) {
+  btn.parentNode.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  const h = han === '役満' ? 13 : parseInt(han);
+  formState.ronDetails[player].han = h;
+  const fuGroup = document.getElementById(`fu-group-${player}`);
+  if (h <= 4) { fuGroup.style.display = 'flex'; }
+  else { fuGroup.style.display = 'none'; formState.ronDetails[player].fu = 0; }
+  updateFuDisabled(player);
+}
+function setPlayerFu(btn, player, fu) {
+  btn.parentNode.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  formState.ronDetails[player].fu = fu;
+}
+function updateFuDisabled(player) {
+  const h = formState.ronDetails[player].han;
+  if(h === 1) {
+    const b20 = document.getElementById(`btn-fu-${player}-20`);
+    const b25 = document.getElementById(`btn-fu-${player}-25`);
+    if(b20) { b20.disabled = true; b20.classList.remove('selected'); }
+    if(b25) { b25.disabled = true; b25.classList.remove('selected'); }
+    if(formState.ronDetails[player].fu === 20 || formState.ronDetails[player].fu === 25) formState.ronDetails[player].fu = null;
+  } else {
+    const b20 = document.getElementById(`btn-fu-${player}-20`);
+    const b25 = document.getElementById(`btn-fu-${player}-25`);
+    if(b20) b20.disabled = false;
+    if(b25) b25.disabled = false;
+  }
+}
+
+function getDistance(from, to) {
+  const m = appState.activeMatch;
+  let d = (m.seating.indexOf(to) - m.seating.indexOf(from) + 4) % 4;
+  return d === 0 ? 4 : d;
+}
+function distributeKyotaku(kyotaku, agariPlayers, f) {
+  let res = {};
+  agariPlayers.forEach(p => res[p] = 0);
+  if (kyotaku === 0) return res;
+  
+  let base = Math.floor(kyotaku / agariPlayers.length);
+  let rem = kyotaku % agariPlayers.length;
+  
+  agariPlayers.forEach(p => res[p] = base * 1000);
+  if (rem > 0) {
+    let sorted = agariPlayers.slice().sort((a, b) => getDistance(f, a) - getDistance(f, b));
+    for(let i=0; i<rem; i++) res[sorted[i]] += 1000;
+  }
+  return res;
+}
+
+function submitRon(endMatch = false) {
+  const m = appState.activeMatch;
+  if(!formState.agari.length || !formState.hoju.length) return alert("入力が不足しています。");
+  if(formState.agari.includes(formState.hoju[0])) return alert("アガリ者と放銃者が同じです。");
+  
+  for(let p of formState.agari) {
+    const d = formState.ronDetails[p];
+    if(!d || !d.han || (d.han<=4 && !d.fu)) return alert(`${p}の飜・符が未入力です。`);
+  }
+
+  const oldScores = {...m.scores};
+  const oldKyotaku = m.kyotaku;
+  const f = formState.hoju[0];
+  let oyaWon = false;
+  let details = [];
+
+  formState.riichi.forEach(p => { m.scores[p] -= 1000; m.kyotaku += 1; });
+  const kyoDict = distributeKyotaku(m.kyotaku, formState.agari, f);
+  m.kyotaku = 0;
+
+  formState.agari.forEach(a => {
+    const d = formState.ronDetails[a];
+    const isOya = (a === getOyaPlayer());
+    if(isOya) oyaWon = true;
+    const res = calcScore(d.han, d.fu, isOya, false);
+    
+    let getPt = res.total + m.honba * 300 + kyoDict[a];
+    m.scores[a] += getPt;
+    m.scores[f] -= (res.total + m.honba * 300);
+    
+    details.push(`${a} ← ${f} (${res.name || d.han+'飜'}${kyoDict[a]>0 ? ' 供託込':''})`);
+  });
+
+  if(!confirmScoreChange(oldScores, oldKyotaku, m)) {
+    m.scores = oldScores; m.kyotaku = oldKyotaku; return;
+  }
+
+  addLog(details.join("<br>"), "ロン");
+  if(endMatch) endMatchConfirm(true); else proceedKyoku(oyaWon);
+}
+
+function submitTsumo(endMatch = false) {
+  const m = appState.activeMatch;
+  if(formState.agari.length !== 1) return alert("アガリ者を選択してください。");
+  const a = formState.agari[0];
+  const d = formState.ronDetails[a];
+  if(!d || !d.han || (d.han<=4 && !d.fu)) return alert("飜・符が未入力です。");
+  
+  const oldScores = {...m.scores};
+  const oldKyotaku = m.kyotaku;
+
+  formState.riichi.forEach(p => { m.scores[p] -= 1000; m.kyotaku += 1; });
+  const isOya = (a === getOyaPlayer());
+  const res = calcScore(d.han, d.fu, isOya, true);
+
+  if (isOya) {
+    let pay = res.pays[0] + m.honba * 100;
+    m.seating.forEach(p => { if(p !== a) { m.scores[p] -= pay; m.scores[a] += pay; } });
+  } else {
+    let koPay = res.pays[0] + m.honba * 100;
+    let oyaPay = res.pays[1] + m.honba * 100;
+    m.seating.forEach(p => {
+      if (p === a) return;
+      if (p === getOyaPlayer()) { m.scores[p] -= oyaPay; m.scores[a] += oyaPay; }
+      else { m.scores[p] -= koPay; m.scores[a] += koPay; }
+    });
+  }
+
+  m.scores[a] += m.kyotaku * 1000;
+  m.kyotaku = 0;
+
+  if(!confirmScoreChange(oldScores, oldKyotaku, m)) {
+    m.scores = oldScores; m.kyotaku = oldKyotaku; return;
+  }
+
+  // ツモのログ表記修正
+  addLog(`${a} ツモ (${res.name || d.han+'飜'})`, "ツモ");
+  if(endMatch) endMatchConfirm(true); else proceedKyoku(isOya);
+}
+
+function submitRyukyoku(endMatch = false) {
+  const m = appState.activeMatch;
+  const oldScores = {...m.scores};
+  const oldKyotaku = m.kyotaku;
+  
+  formState.riichi.forEach(p => { m.scores[p] -= 1000; m.kyotaku += 1; });
+  
+  const tc = formState.tenpai.length;
+  if(tc > 0 && tc < 4) {
+    const getPt = 3000 / tc;
+    const payPt = 3000 / (4 - tc);
+    m.seating.forEach(p => {
+      if(formState.tenpai.includes(p)) m.scores[p] += getPt;
+      else m.scores[p] -= payPt;
+    });
+  }
+
+  if(!confirmScoreChange(oldScores, oldKyotaku, m)) {
+    m.scores = oldScores; m.kyotaku = oldKyotaku; return;
+  }
+
+  const oyaTenpai = formState.tenpai.includes(getOyaPlayer());
+  // 東場は聴牌で連荘、南場は無条件連荘
+  let renchan = oyaTenpai;
+  if(m.kyoku >= 5) renchan = true;
+
+  addLog(`流局 (聴牌${tc}人)`, "流局");
+  if(endMatch) endMatchConfirm(true); else proceedKyoku(renchan, true);
+}
+
+function submitCustom() {
+  const m = appState.activeMatch;
+  const oldScores = {...m.scores};
+  const oldKyotaku = m.kyotaku;
+  
+  let sum = 0;
+  m.seating.forEach(p => {
+    const v = parseInt(document.getElementById('custom-' + p).value) || 0;
+    m.scores[p] = v;
+    sum += v;
+  });
+  
+  if (sum + m.kyotaku*1000 !== 120000) {
+    if(!confirm(`点数合計が120,000点ではありません(現在${sum+m.kyotaku*1000})。続行しますか？`)) {
+       m.scores = oldScores; m.kyotaku = oldKyotaku; return;
+    }
+  }
+
+  if(!confirmScoreChange(oldScores, oldKyotaku, m)) {
+    m.scores = oldScores; m.kyotaku = oldKyotaku; return;
+  }
+
+  m.kyoku = parseInt(document.getElementById('custom-kyoku').value);
+  m.honba = parseInt(document.getElementById('custom-honba').value);
+  
+  addLog("点数・局 直接修正", "カスタム");
+  saveGraphState();
+  renderMatch();
+}
+
+function proceedKyoku(renchan, isRyukyoku=false) {
+  const m = appState.activeMatch;
+  if (renchan) { 
+    m.honba++; 
+  } else { 
+    m.kyoku++; 
+    m.honba = isRyukyoku ? m.honba + 1 : 0; 
+  }
+  saveGraphState();
+  renderMatch();
+}
+
+function getTsumoString(s, isOya, topIsOya) {
+  const obj = isOya ? s.oya : s.ko;
+  return isOya ? `${obj.pays[0]}ALL` : `${obj.pays[0]}-${obj.pays[1]}`;
+}
+function calcAndRenderTopConditions() {
+  const m = appState.activeMatch;
+  const oya = getOyaPlayer();
+  let topP = m.seating[0], topS = m.scores[topP];
+  m.seating.forEach(p => { if(m.scores[p] > topS){ topS = m.scores[p]; topP = p; }});
+  
+  const div = document.getElementById('conditions-list');
+  div.innerHTML = '';
+  
+  m.seating.forEach(p => {
+    if(p === topP) return;
+    if(p === oya) return; 
+
+    // 自分が和了った場合、確実に供託を得られるため、その分を差分から差し引く
+    const effectiveMyScore = m.scores[p] + m.kyotaku * 1000;
+    const diff = topS - effectiveMyScore;
+    const isOya = (p === oya);
+    const topIsOya = (topP === oya);
+    
+    let bestTsumoStr = "条件なし", bestRonStr = "条件なし";
+    let minTsumo = Infinity, minRon = Infinity;
+
+    if (diff > 0) {
+      for(let s of SCORE_LIST) {
+        const ronTotal = isOya ? s.oyaRon.total : s.koRon.total;
+        if (ronTotal * 2 >= diff && ronTotal < minRon) {
+          minRon = ronTotal;
+          bestRonStr = ronTotal + "以上";
+        }
+        const obj = isOya ? s.oya : s.ko;
+        const tsumoDiff = isOya ? obj.total + obj.pays[0] : (topIsOya ? obj.total + obj.pays[1] : obj.total + obj.pays[0]);
+        if (tsumoDiff >= diff && obj.total < minTsumo) {
+          minTsumo = obj.total;
+          bestTsumoStr = getTsumoString(s, isOya, topIsOya) + "以上";
+        }
+      }
+    }
+    div.innerHTML += `<div class="condition-item"><strong style="color:${PLAYER_COLORS[p]}">${p}</strong> (差 ${diff>0?diff:0})<br>ツモ: ${bestTsumoStr} / 直撃: ${bestRonStr}</div>`;
+  });
+  if(div.innerHTML === '') div.innerHTML = "全員がトップ、または親が連荘条件です";
+}
+
+function endMatchConfirm(skipPrompt = false) {
+  if(!skipPrompt && !confirm("対局を終了して成績を記録しますか？")) return;
+  const m = appState.activeMatch;
+  
+  let topP = m.seating[0], topS = m.scores[topP];
+  m.seating.forEach(p => { if(m.scores[p] > topS){ topS = m.scores[p]; topP = p; }});
+  m.scores[topP] += m.kyotaku * 1000;
+  m.kyotaku = 0;
+
+  m.endTime = Date.now();
+  appState.history.matches.push(m);
+  saveData();
+  appState.activeMatch = null;
+  nav('home');
+}
+
+function renderDetail(id) {
+  const m = appState.history.matches.find(x => x.id === id);
+  if(!m) return nav('home');
+  const div = document.getElementById('detail-content');
+  
+  const sorted = Object.entries(m.scores).sort((a,b)=>b[1]-a[1]);
+  let html = `<p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:10px;">開始: ${formatTime(m.startTime)}<br>終了: ${formatTime(m.endTime)}</p>`;
+  html += sorted.map((arr, i) => `<div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:1.1rem;">
+    <span>${i+1}位 ${arr[0]}</span><span style="font-family:monospace; font-weight:bold;">${formatPt(arr[1])} (${arr[1].toLocaleString()})</span></div>`).join('');
+  
+  html += `<h4 style="margin-top:16px; border-bottom:1px solid var(--border); padding-bottom:4px;">対局ログ</h4>`;
+  html += `<div class="log-container" style="margin-top:8px;">` + m.logs.map(l => `
+    <div class="log-item">
+      <div class="log-header"><span>${l.kyoku} ${l.honba}本</span><span>${formatTime(l.timestamp).split(' ')[1]}</span></div>
+      <div class="log-body"><span class="log-detail">${l.detail}</span><span class="log-result">${l.resultText}</span></div>
+    </div>`).reverse().join('') + `</div>`;
+  div.innerHTML = html;
+
+  updateChart('detailChart', m);
+
+  let editHtml = '';
+  PLAYERS.forEach(p => {
+    editHtml += `<div style="display:flex; align-items:center; margin-bottom:4px;">
+      <label style="width:50px; color:${PLAYER_COLORS[p]}">${p}</label>
+      <input type="number" id="edit-${p}" value="${m.scores[p]}" style="margin-bottom:0;"></div>`;
+  });
+  document.getElementById('edit-scores').innerHTML = editHtml;
+}
+
+function saveEditedScores() {
+  const m = appState.history.matches.find(x => x.id === appState.viewingMatchId);
+  if(!m) return;
+  PLAYERS.forEach(p => { m.scores[p] = parseInt(document.getElementById(`edit-${p}`).value) || 0; });
+  saveData();
+  renderDetail(appState.viewingMatchId);
+  alert("保存しました。");
+}
+function deleteMatch() {
+  if(!confirm("本当にこの対局記録を削除しますか？")) return;
+  appState.history.matches = appState.history.matches.filter(x => x.id !== appState.viewingMatchId);
+  saveData();
+  nav('home');
+}
+
+function initStatsFilter() {
+  const sel = document.getElementById('stats-period');
+  sel.innerHTML = '<option value="all">全期間</option>';
+  const periods = new Set();
+  appState.history.matches.forEach(m => {
+    const d = new Date(m.startTime);
+    periods.add(`${d.getFullYear()}`);
+    periods.add(`${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`);
+  });
+  Array.from(periods).sort().reverse().forEach(p => { sel.innerHTML += `<option value="${p}">${p.includes('/') ? p+'月' : p+'年'}</option>`; });
+}
+
+function renderStats() {
+  const period = document.getElementById('stats-period').value;
+  const matches = appState.history.matches.filter(m => {
+    if(period === 'all') return true;
+    const d = new Date(m.startTime);
+    if(period.length === 4) return `${d.getFullYear()}` === period; 
+    return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}` === period; 
+  });
+
+  let s = {};
+  PLAYERS.forEach(p => s[p] = { games:0, rankSum:0, kyoku:0, agari:0, hoju:0, totalScore:0 });
+
+  matches.forEach(m => {
+    if (!m.scores || Object.keys(m.scores).length === 0) return; // 不正データスキップ
+    const sorted = PLAYERS.slice().sort((a,b) => m.scores[b] - m.scores[a]);
+    PLAYERS.forEach(p => {
+      s[p].games++;
+      s[p].rankSum += sorted.indexOf(p) + 1;
+      s[p].totalScore += ((m.scores[p] || 0) - 30000);
+    });
+    m.logs.forEach(l => {
+      PLAYERS.forEach(p => s[p].kyoku++); 
+      if(l.detail.includes('ツモ') || l.detail.includes('←')) {
+        let lines = l.detail.split('<br>');
+        lines.forEach(line => {
+          if(line.startsWith(p + ' ツモ')) s[p].agari++;
+          if(line.startsWith(p + ' ←')) s[p].agari++;
+          if(line.includes('← ' + p)) s[p].hoju++;
+        });
+      }
+    });
+  });
+
+  const sortedPlayers = [...PLAYERS].sort((a,b) => s[b].totalScore - s[a].totalScore);
+  const table = document.getElementById('stats-table');
+  let html = `<tr><th>項目</th>${sortedPlayers.map(p=>`<th><span style="color:${PLAYER_COLORS[p]}">${p}</span></th>`).join('')}</tr>`;
+  
+  const getVals = (fn) => sortedPlayers.map(p => s[p].games > 0 ? fn(s[p]) : 0);
+  const aRate = getVals(d => (d.agari / (d.kyoku/4 || 1)) * 100);
+  const hRate = getVals(d => (d.hoju / (d.kyoku/4 || 1)) * 100);
+  const avgRank = getVals(d => d.rankSum / d.games);
+
+  html += `<tr><td>総合スコア</td>${sortedPlayers.map(p => {
+    const pt = formatPt(s[p].totalScore + 30000); 
+    const isPlus = s[p].totalScore > 0;
+    return `<td class="${isPlus?'text-plus':'text-minus'}">${pt}</td>`;
+  }).join('')}</tr>`;
+  
+  html += `<tr><td>平均着順</td>${avgRank.map(v => `<td>${v.toFixed(2)}</td>`).join('')}</tr>`;
+  html += `<tr><td>和了率</td>${aRate.map(v => `<td>${v.toFixed(1)}%</td>`).join('')}</tr>`;
+  html += `<tr><td>放銃率</td>${hRate.map(v => `<td>${v.toFixed(1)}%</td>`).join('')}</tr>`;
+  html += `<tr><td>半荘数</td>${sortedPlayers.map(p => `<td>${s[p].games}</td>`).join('')}</tr>`;
+  
+  table.innerHTML = html;
+}
+
+nav('home');
+</script>
+</body>
+</html>
